@@ -4,7 +4,7 @@
  */
 
 /*
- * STUDENT NUMBER: s
+ * STUDENT NUMBER: s1612970
  */
 #include <infos/mm/page-allocator.h>
 #include <infos/mm/mm.h>
@@ -37,9 +37,9 @@ private:
 		 */
 		return (1 << order);
 	}
-	
+
 	/**
-	 * Returns TRUE if the supplied page descriptor is correctly aligned for the 
+	 * Returns TRUE if the supplied page descriptor is correctly aligned for the
 	 * given order.  Returns FALSE otherwise.
 	 * @param pgd The page descriptor to test alignment for.
 	 * @param order The order to use for calculations.
@@ -50,7 +50,7 @@ private:
 		// it divides evenly into the number pages in a block of the given order.
 		return (sys.mm().pgalloc().pgd_to_pfn(pgd) % pages_per_block(order)) == 0;
 	}
-	
+
 	/** Given a page descriptor, and an order, returns the buddy PGD.  The buddy could either be
 	 * to the left or the right of PGD, in the given order.
 	 * @param pgd The page descriptor to find the buddy for.
@@ -68,18 +68,18 @@ private:
 		if (!is_correct_alignment_for_order(pgd, order)) {
 			return NULL;
 		}
-				
+
 		// (3) Calculate the page-frame-number of the buddy of this page.
 		// * If the PFN is aligned to the next order, then the buddy is the next block in THIS order.
 		// * If it's not aligned, then the buddy must be the previous block in THIS order.
 		uint64_t buddy_pfn = is_correct_alignment_for_order(pgd, order + 1) ?
-			sys.mm().pgalloc().pgd_to_pfn(pgd) + pages_per_block(order) : 
+			sys.mm().pgalloc().pgd_to_pfn(pgd) + pages_per_block(order) :
 			sys.mm().pgalloc().pgd_to_pfn(pgd) - pages_per_block(order);
-		
+
 		// (4) Return the page descriptor associated with the buddy page-frame-number.
 		return sys.mm().pgalloc().pfn_to_pgd(buddy_pfn);
 	}
-	
+
 	/**
 	 * Inserts a block into the free list of the given order.  The block is inserted in ascending order.
 	 * @param pgd The page descriptor of the block to insert.
@@ -92,21 +92,21 @@ private:
 		// Starting from the _free_area array, find the slot in which the page descriptor
 		// should be inserted.
 		PageDescriptor **slot = &_free_areas[order];
-		
+
 		// Iterate whilst there is a slot, and whilst the page descriptor pointer is numerically
 		// greater than what the slot is pointing to.
 		while (*slot && pgd > *slot) {
 			slot = &(*slot)->next_free;
 		}
-		
+
 		// Insert the page descriptor into the linked list.
 		pgd->next_free = *slot;
 		*slot = pgd;
-		
+
 		// Return the insert point (i.e. slot)
 		return slot;
 	}
-	
+
 	/**
 	 * Removes a block from the free list of the given order.  The block MUST be present in the free-list, otherwise
 	 * the system will panic.
@@ -123,12 +123,12 @@ private:
 
 		// Make sure the block actually exists.  Panic the system if it does not.
 		assert(*slot == pgd);
-		
+
 		// Remove the block from the free list.
 		*slot = pgd->next_free;
 		pgd->next_free = NULL;
 	}
-	
+
 	/**
 	 * Given a pointer to a block of free memory in the order "source_order", this function will
 	 * split the block in half, and insert it into the order below.
@@ -141,14 +141,37 @@ private:
 	{
 		// Make sure there is an incoming pointer.
 		assert(*block_pointer);
-		
+
 		// Make sure the block_pointer is correctly aligned.
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
-		
+
 		// TODO: Implement this function
-		return nullptr;		
+		if(source_order == 0)
+			return nullptr;
+		else{
+				int size = pages_per_block(source_order);
+				int split_at = size/2;
+				auto first = block_pointer;
+				auto first_half = block_pointer;
+				for(int i = 0;i<split_at;i++){
+						auto temp = first -> next;
+						first_half->next = temp;
+						first = temp;
+				}
+				auto second_half = first;
+				auto second = first;
+				for(int i = split_at; i<size;i++){
+					auto temp = second -> next;
+					second_half -> next = temp;
+					second = temp;
+				}
+				remove_block(*block_pointer, source_order);
+				insert_block(*first_half,source_order-1);
+				insert_block(*second_half,source_order-1);
+		}
+		return nullptr;
 	}
-	
+
 	/**
 	 * Takes a block in the given source order, and merges it (and it's buddy) into the next order.
 	 * This function assumes both the source block and the buddy block are in the free list for the
@@ -160,14 +183,14 @@ private:
 	PageDescriptor **merge_block(PageDescriptor **block_pointer, int source_order)
 	{
 		assert(*block_pointer);
-		
+
 		// Make sure the area_pointer is correctly aligned.
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
 
 		// TODO: Implement this function
-		return nullptr;		
+		return nullptr;
 	}
-	
+
 public:
 	/**
 	 * Constructs a new instance of the Buddy Page Allocator.
@@ -178,7 +201,7 @@ public:
 			_free_areas[i] = NULL;
 		}
 	}
-	
+
 	/**
 	 * Allocates 2^order number of contiguous pages
 	 * @param order The power of two, of the number of contiguous pages to allocate.
@@ -189,7 +212,7 @@ public:
 	{
 		not_implemented();
 	}
-	
+
 	/**
 	 * Frees 2^order contiguous pages.
 	 * @param pgd A pointer to an array of page descriptors to be freed.
@@ -201,10 +224,10 @@ public:
 		// for the order on which it is being freed, for example, it is
 		// illegal to free page 1 in order-1.
 		assert(is_correct_alignment_for_order(pgd, order));
-		
+
 		not_implemented();
 	}
-	
+
 	/**
 	 * Reserves a specific page, so that it cannot be allocated.
 	 * @param pgd The page descriptor of the page to reserve.
@@ -214,7 +237,7 @@ public:
 	{
 		not_implemented();
 	}
-	
+
 	/**
 	 * Initialises the allocation algorithm.
 	 * @return Returns TRUE if the algorithm was successfully initialised, FALSE otherwise.
@@ -222,10 +245,16 @@ public:
 	bool init(PageDescriptor *page_descriptors, uint64_t nr_page_descriptors) override
 	{
 		mm_log.messagef(LogLevel::DEBUG, "Buddy Allocator Initialising pd=%p, nr=0x%lx", page_descriptors, nr_page_descriptors);
-		
+
 		// TODO: Initialise the free area linked list for the maximum order
 		// to initialise the allocation algorithm.
-		
+
+		PageDescriptor *initialise;
+		initialise = page_descriptors;
+		for(int i = 1; i < nr_page_descriptors; i++){
+				page_descriptors = page_descriptors->next_free;
+				initialise->next = page_descriptors;
+		}
 		not_implemented();
 	}
 
@@ -233,7 +262,7 @@ public:
 	 * Returns the friendly name of the allocation algorithm, for debugging and selection purposes.
 	 */
 	const char* name() const override { return "buddy"; }
-	
+
 	/**
 	 * Dumps out the current state of the buddy system
 	 */
@@ -241,12 +270,12 @@ public:
 	{
 		// Print out a header, so we can find the output in the logs.
 		mm_log.messagef(LogLevel::DEBUG, "BUDDY STATE:");
-		
+
 		// Iterate over each free area.
 		for (unsigned int i = 0; i < ARRAY_SIZE(_free_areas); i++) {
 			char buffer[256];
 			snprintf(buffer, sizeof(buffer), "[%d] ", i);
-						
+
 			// Iterate over each block in the free area.
 			PageDescriptor *pg = _free_areas[i];
 			while (pg) {
@@ -254,12 +283,12 @@ public:
 				snprintf(buffer, sizeof(buffer), "%s%lx ", buffer, sys.mm().pgalloc().pgd_to_pfn(pg));
 				pg = pg->next_free;
 			}
-			
+
 			mm_log.messagef(LogLevel::DEBUG, "%s", buffer);
 		}
 	}
 
-	
+
 private:
 	PageDescriptor *_free_areas[MAX_ORDER];
 };
