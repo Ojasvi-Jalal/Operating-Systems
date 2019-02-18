@@ -188,6 +188,18 @@ private:
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
 
 		// TODO: Implement this function
+		auto buddy = block_pointer -> next;
+
+		if(block_pointer == NULL || buddy == NULL)
+			returm nullptr;
+		else{
+			auto head = block_pointer;
+		while(head -> next != NULL){
+
+		}
+		head ->next = buddy;
+		remove_block(block_pointer,source_order);
+		insert_block(head,source_order-1);
 		return nullptr;
 	}
 
