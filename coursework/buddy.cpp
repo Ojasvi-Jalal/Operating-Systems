@@ -151,20 +151,10 @@ private:
 		else{
 				int size = pages_per_block(source_order);
 				int split_at = size/2;
-				auto first = block_pointer;
+				//auto first = block_pointer;
 				auto first_half = block_pointer;
-				for(int i = 0;i<split_at;i++){
-						auto temp = first -> next;
-						first_half->next = temp;
-						first = temp;
-				}
-				auto second_half = first;
-				auto second = first;
-				for(int i = split_at; i<size;i++){
-					auto temp = second -> next;
-					second_half -> next = temp;
-					second = temp;
-				}
+				auto second_half = first+split_at;
+
 				remove_block(*block_pointer, source_order);
 				insert_block(*first_half,source_order-1);
 				insert_block(*second_half,source_order-1);
@@ -188,19 +178,21 @@ private:
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
 
 		// TODO: Implement this function
-		auto buddy = block_pointer -> next;
+		auto buddy = buddy_of(*block_pointer,source_order);
 
-		if(block_pointer == NULL || buddy == NULL)
-			returm nullptr;
-		else{
-			auto head = block_pointer;
-		while(head -> next != NULL){
-
+		if(buddy == NULL)
+			return nullptr;
+		else if(buddy>*block_pointer){
+				auto merged = *block_pointer;
+				insert_block(merged,source_order+1);
 		}
-		head ->next = buddy;
-		remove_block(block_pointer,source_order);
-		insert_block(head,source_order-1);
-		return nullptr;
+		else if(buddy<*block_pointer){
+				auto merged = buddy;
+				insert_block(merged,source_order+1);
+		}
+		remove_block(*block_pointer,source_order);
+		remove_block(buddy,source_order);
+		return merged;
 	}
 
 public:
