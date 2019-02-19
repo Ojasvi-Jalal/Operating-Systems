@@ -262,11 +262,11 @@ public:
 
 		PageDescriptor *initialise;
 		initialise = page_descriptors;
-		for(int i = 1; i < nr_page_descriptors; i++){
-				page_descriptors = page_descriptors->next_free;
-				initialise->next = page_descriptors;
+		for(int i = 0; i < nr_page_descriptors; i++){
+				_free_areas[i] = initialise;
+				initialise = page_descriptors->next_free;
 		}
-		not_implemented();
+		return FALSE;
 	}
 
 	/**
