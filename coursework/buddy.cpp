@@ -236,8 +236,7 @@ public:
 		// for the order on which it is being freed, for example, it is
 		// illegal to free page 1 in order-1.
 		assert(is_correct_alignment_for_order(pgd, order));
-
-		not_implemented();
+		merge_block(**pgd, order);
 	}
 
 	/**
