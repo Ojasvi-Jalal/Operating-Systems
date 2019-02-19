@@ -158,6 +158,7 @@ private:
 				remove_block(*block_pointer, source_order);
 				insert_block(*first_half,source_order-1);
 				insert_block(*second_half,source_order-1);
+				return first_half;
 		}
 		return nullptr;
 	}
@@ -214,7 +215,14 @@ public:
 	 */
 	PageDescriptor *alloc_pages(int order) override
 	{
-		not_implemented();
+		PageDescriptor **slot = &_free_areas[order];
+		if (slot != NULL) {
+			return *slot;
+		}
+		else{
+			split(&_free_areas[order+1],order+1);
+			alloc_pages(order);
+		}
 	}
 
 	/**
