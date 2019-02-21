@@ -260,13 +260,40 @@ public:
 		// TODO: Initialise the free area linked list for the maximum order
 		// to initialise the allocation algorithm.
 
-		PageDescriptor *initialise;
-		initialise = page_descriptors;
-		for(int i = 0; i < nr_page_descriptors; i++){
-				_free_areas[i] = initialise;
-				initialise = page_descriptors->next_free;
+		auto order = MAX_ORDER;
+		uint64_t free = nr_page_descriptors;
+		auto pgd = page_descriptors;
+
+
+		// Iterate whilst there is are pages still unallocated and order is not less than 0
+		while(free>0&&order>=0){
+
+			//find the number of blocks that could be allocated to the order given free.
+			uint64_t blocks_needed = free/pages_per_block(order);
+
+			assert(is_correct_alignment_for_order(pgd, order));
+
+			//if more than 0 blocks can be allocated then
+			if(blocks_needed>0){
+				//allocate the pointer to the first pgd in the block
+				_free_areas[order] = &(*pgd);
+
+				//iterate and move the pointers
+				for(int i=1; i<blocks_needed; i++){
+					pgd->next_free = pgd+ pages_per_block(order);
+					pgd += pages_per_block(order);
+				}
+
+				pgd += pages_per_block(order);
+			}
+
+			//calculate the new number of free pages
+			free = free % (pages_per_block(order));
+			//go to the next order
+			order--;
 		}
-		return FALSE;
+
+		return TRUE;
 	}
 
 	/**
