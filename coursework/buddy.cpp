@@ -153,12 +153,12 @@ private:
 				int split_at = size/2;
 				//auto first = block_pointer;
 				auto first_half = block_pointer;
-				auto second_half = first+split_at;
+				auto second_half = first_half+split_at;
 
 				remove_block(*block_pointer, source_order);
 				insert_block(*first_half,source_order-1);
 				insert_block(*second_half,source_order-1);
-				return first_half;
+				return *first_half;
 		}
 		return nullptr;
 	}
@@ -186,14 +186,18 @@ private:
 		else if(buddy>*block_pointer){
 				auto merged = *block_pointer;
 				insert_block(merged,source_order+1);
+				remove_block(*block_pointer,source_order);
+				remove_block(buddy,source_order);
+				return &merged;
 		}
 		else if(buddy<*block_pointer){
 				auto merged = buddy;
 				insert_block(merged,source_order+1);
+				remove_block(*block_pointer,source_order);
+				remove_block(buddy,source_order);
+				return &merged;
 		}
-		remove_block(*block_pointer,source_order);
-		remove_block(buddy,source_order);
-		return merged;
+
 	}
 
 public:
@@ -220,7 +224,7 @@ public:
 			return *slot;
 		}
 		else{
-			split(&_free_areas[order+1],order+1);
+			split_block(&_free_areas[order+1],order+1);
 			alloc_pages(order);
 		}
 	}
@@ -236,7 +240,7 @@ public:
 		// for the order on which it is being freed, for example, it is
 		// illegal to free page 1 in order-1.
 		assert(is_correct_alignment_for_order(pgd, order));
-		merge_block(**pgd, order);
+		merge_block(&pgd, order);
 	}
 
 	/**
@@ -246,8 +250,82 @@ public:
 	 */
 	bool reserve_page(PageDescriptor *pgd)
 	{
-		not_implemented();
-	}
+		auto order = 0;
+		for(order = 0; order<MAX_ORDER; order++){
+			PageDescriptor **slot = &_free_areas[order];
+
+			if(order == 0)
+			{
+				while (*slot && pgd != *slot) {
+					slot = &(*slot)->next_free;
+				}
+
+				if(*slot == pgd){
+					remove_block(pgd,order);
+					return true;
+				}
+			}
+
+			if(order !=0){
+				while (*slot && pgd != *slot) {
+						PageDescriptor **last = &(*slot)+pages_per_block(order);
+
+						if(pgd > *slot && pgd < *last){
+							split_block(slot,order);
+							break;
+						}
+
+						else{
+							slot = &(*slot)->next_free;
+						}
+					}
+
+					if(*slot == pgd){
+						split_block(&pgd,order);
+						break;
+					}
+				}
+
+			if(order == 16 && *slot != pgd)
+					return false;
+		}
+
+		for(auto i = order-1; i>=0; i--){
+			PageDescriptor **slot = &_free_areas[order];
+			PageDescriptor **last = &(*slot)+pages_per_block(order);
+			if(order == 0)
+			{
+				while (*slot && pgd != *slot) {
+					slot = &(*slot)->next_free;
+				}
+
+				if(*slot == pgd){
+					remove_block(pgd,order);
+					return true;
+				}
+
+				else{
+					return false;
+				}
+			}
+			while (*slot && pgd != *slot) {
+					PageDescriptor **last = &(*slot)+pages_per_block(order);
+
+					if(pgd > *slot && pgd < *last){
+						split_block(slot,order);
+						break;
+					}
+
+					else{
+						slot = &(*slot)->next_free;
+					}
+				}
+
+				if(*slot == pgd){
+					split_block(&pgd,order);
+				}
+			}
+		}
 
 	/**
 	 * Initialises the allocation algorithm.
@@ -260,7 +338,7 @@ public:
 		// TODO: Initialise the free area linked list for the maximum order
 		// to initialise the allocation algorithm.
 
-		auto order = MAX_ORDER;
+		auto order = MAX_ORDER-1;
 		uint64_t free = nr_page_descriptors;
 		auto pgd = page_descriptors;
 
@@ -279,7 +357,7 @@ public:
 				_free_areas[order] = &(*pgd);
 
 				//iterate and move the pointers
-				for(int i=1; i<blocks_needed; i++){
+				for(uint64_t i=1; i<blocks_needed; i++){
 					pgd->next_free = pgd+ pages_per_block(order);
 					pgd += pages_per_block(order);
 				}
@@ -293,7 +371,7 @@ public:
 			order--;
 		}
 
-		return TRUE;
+		return true;
 	}
 
 	/**
