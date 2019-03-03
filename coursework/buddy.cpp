@@ -145,22 +145,30 @@ private:
 		// Make sure the block_pointer is correctly aligned.
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
 
-		// TODO: Implement this function
+		mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: checking if source_order is 0");
 		if(source_order == 0)
-			return nullptr;
+			return *block_pointer;
 		else{
-				int size = pages_per_block(source_order);
-				int split_at = size/2;
-				//auto first = block_pointer;
-				auto first_half = block_pointer;
-				auto second_half = first_half+split_at;
+				mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: source order is not 0,so starting splitting");
+				int split_order = source_order-1;
+				uint64_t size = pages_per_block(split_order);
 
-				remove_block(*block_pointer, source_order);
-				insert_block(*first_half,source_order-1);
-				insert_block(*second_half,source_order-1);
-				return *first_half;
+				mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: source_order:%d",source_order);
+				mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: split_order:%d",split_order);
+
+				PageDescriptor *first_half = *block_pointer;
+				PageDescriptor *second_half = first_half+size;
+
+				mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: removing the block now");
+				remove_block(first_half, source_order);
+
+				mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: inserting first half");
+				insert_block(first_half,split_order);
+				mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: inserting second half");
+				insert_block(second_half,split_order);
+
+				return first_half;
 		}
-		return nullptr;
 	}
 
 	/**
@@ -250,7 +258,11 @@ public:
 	 */
 	bool reserve_page(PageDescriptor *pgd)
 	{
+
+		mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: entered reserve page");
 		auto order = 0;
+		bool break_Out = false;
+
 		for(order = 0; order<MAX_ORDER; order++){
 			PageDescriptor **slot = &_free_areas[order];
 
@@ -261,36 +273,53 @@ public:
 				}
 
 				if(*slot == pgd){
+					mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: found the page at 0th order, will be removing it now");
 					remove_block(pgd,order);
 					return true;
 				}
 			}
 
 			if(order !=0){
-				while (*slot && pgd != *slot) {
-						PageDescriptor **last = &(*slot)+pages_per_block(order);
+				mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: didn't find at order %d",order-1);
+				mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: order: %d", order);
+				while (*slot) {
 
-						if(pgd > *slot && pgd < *last){
+						if(pgd >= *slot && pgd < (*slot+pages_per_block(order))){
+							mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: pgd is in this block at order %d, will split now",order);
+							mm_log.messagef(LogLevel::DEBUG, "breaking now");
 							split_block(slot,order);
+							break_Out = true;
+							mm_log.messagef(LogLevel::DEBUG, "didn't break");
 							break;
 						}
 
 						else{
+							mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: going to the next block");
 							slot = &(*slot)->next_free;
 						}
 					}
+			}
 
-					if(*slot == pgd){
-						split_block(&pgd,order);
-						break;
-					}
-				}
+			mm_log.messagef(LogLevel::DEBUG, "didn't get out of the for loop");
 
-			if(order == 16 && *slot != pgd)
+			if(break_Out){
+				mm_log.messagef(LogLevel::DEBUG, "breaking out of the for loop");
+				break;
+			}
+
+			if(order == 16 && *slot != pgd){
+					mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: nothing found,returning false");
 					return false;
+			}
+
 		}
 
+		mm_log.messagef(LogLevel::DEBUG, "entering new for loop %d", order);
+
 		for(auto i = order-1; i>=0; i--){
+			order = i;
+			mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE, 2nd for loop: order: %d", order);
+
 			PageDescriptor **slot = &_free_areas[order];
 			PageDescriptor **last = &(*slot)+pages_per_block(order);
 			if(order == 0)
@@ -308,10 +337,9 @@ public:
 					return false;
 				}
 			}
-			while (*slot && pgd != *slot) {
-					PageDescriptor **last = &(*slot)+pages_per_block(order);
-
-					if(pgd > *slot && pgd < *last){
+			while (*slot) {
+				
+					if(pgd >= *slot && pgd < (*slot+pages_per_block(order))){
 						split_block(slot,order);
 						break;
 					}
@@ -319,10 +347,6 @@ public:
 					else{
 						slot = &(*slot)->next_free;
 					}
-				}
-
-				if(*slot == pgd){
-					split_block(&pgd,order);
 				}
 			}
 		}
@@ -338,17 +362,21 @@ public:
 		// TODO: Initialise the free area linked list for the maximum order
 		// to initialise the allocation algorithm.
 
+		//TODO: case when it returns false
 		auto order = MAX_ORDER-1;
 		uint64_t free = nr_page_descriptors;
 		auto pgd = page_descriptors;
 
-
+		mm_log.messagef(LogLevel::DEBUG, "INIT:");
 		// Iterate whilst there is are pages still unallocated and order is not less than 0
-		while(free>0&&order>=0){
-
+		while(free>0){
+			mm_log.messagef(LogLevel::DEBUG, "init: inside while loop");
+		  mm_log.messagef(LogLevel::DEBUG, "order: %d", order);
+			mm_log.messagef(LogLevel::DEBUG, "free pages: %d", free);
 			//find the number of blocks that could be allocated to the order given free.
 			uint64_t blocks_needed = free/pages_per_block(order);
 
+			mm_log.messagef(LogLevel::DEBUG, "blocks needed: %d", blocks_needed);
 			assert(is_correct_alignment_for_order(pgd, order));
 
 			//if more than 0 blocks can be allocated then
@@ -367,9 +395,12 @@ public:
 
 			//calculate the new number of free pages
 			free = free % (pages_per_block(order));
+			mm_log.messagef(LogLevel::DEBUG, "updated free: %d", free);
 			//go to the next order
 			order--;
 		}
+
+		mm_log.messagef(LogLevel::DEBUG, "returning true");
 
 		return true;
 	}
