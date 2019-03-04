@@ -264,91 +264,78 @@ public:
 		bool break_Out = false;
 
 		for(order = 0; order<MAX_ORDER; order++){
-			PageDescriptor **slot = &_free_areas[order];
-
-			if(order == 0)
-			{
-				while (*slot && pgd != *slot) {
-					slot = &(*slot)->next_free;
-				}
-
-				if(*slot == pgd){
-					mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: found the page at 0th order, will be removing it now");
-					remove_block(pgd,order);
-					return true;
-				}
-			}
-
-			if(order !=0){
+				PageDescriptor *slot = _free_areas[order];
 				mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: didn't find at order %d",order-1);
 				mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: order: %d", order);
-				while (*slot) {
+				while (slot) {
+						if(order == 0){
+							while (slot && pgd != slot) {
+								slot = slot->next_free;
+							}
 
-						if(pgd >= *slot && pgd < (*slot+pages_per_block(order))){
+							assert(slot == pgd);
+							if(slot == pgd){
+								mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: found the page at 0th order, will be removing it now");
+								remove_block(pgd,order);
+								return true;
+							}
+						}
+
+						if(pgd >= slot && pgd < (slot+pages_per_block(order))){
 							mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: pgd is in this block at order %d, will split now",order);
 							mm_log.messagef(LogLevel::DEBUG, "breaking now");
-							split_block(slot,order);
-							break_Out = true;
+							slot = split_block(&slot,order);
+							//order--;
+							if(!(pgd >= slot && pgd < slot+pages_per_block(order))){
+								slot = buddy_of(slot,--order);
+							}
 							mm_log.messagef(LogLevel::DEBUG, "didn't break");
-							break;
 						}
 
 						else{
 							mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: going to the next block");
-							slot = &(*slot)->next_free;
+							slot = slot->next_free;
 						}
-					}
-			}
 
-			mm_log.messagef(LogLevel::DEBUG, "didn't get out of the for loop");
-
-			if(break_Out){
-				mm_log.messagef(LogLevel::DEBUG, "breaking out of the for loop");
-				break;
-			}
-
-			if(order == 16 && *slot != pgd){
-					mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: nothing found,returning false");
-					return false;
-			}
-
-		}
-
-		mm_log.messagef(LogLevel::DEBUG, "entering new for loop %d", order);
-
-		for(auto i = order-1; i>=0; i--){
-			order = i;
-			mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE, 2nd for loop: order: %d", order);
-
-			PageDescriptor **slot = &_free_areas[order];
-			PageDescriptor **last = &(*slot)+pages_per_block(order);
-			if(order == 0)
-			{
-				while (*slot && pgd != *slot) {
-					slot = &(*slot)->next_free;
-				}
-
-				if(*slot == pgd){
-					remove_block(pgd,order);
-					return true;
-				}
-
-				else{
-					return false;
-				}
-			}
-			while (*slot) {
-				
-					if(pgd >= *slot && pgd < (*slot+pages_per_block(order))){
-						split_block(slot,order);
-						break;
-					}
-
-					else{
-						slot = &(*slot)->next_free;
 					}
 				}
-			}
+
+				return false;
+
+		// mm_log.messagef(LogLevel::DEBUG, "entering new for loop %d", order);
+		//
+		// for(auto i = order-1; i>=0; i--){
+		// 	order = i;
+		// 	mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE, 2nd for loop: order: %d", order);
+		//
+		// 	PageDescriptor **slot = &_free_areas[order];
+		// 	PageDescriptor **last = &(*slot)+pages_per_block(order);
+		// 	if(order == 0)
+		// 	{
+		// 		while (*slot && pgd != *slot) {
+		// 			slot = &(*slot)->next_free;
+		// 		}
+		//
+		// 		if(*slot == pgd){
+		// 			remove_block(pgd,order);
+		// 			return true;
+		// 		}
+		//
+		// 		else{
+		// 			return false;
+		// 		}
+		// 	}
+		// 	while (*slot) {
+		// 			if(pgd >= *slot && pgd < (*slot+pages_per_block(order))){
+		// 				split_block(slot,order);
+		// 				break;
+		// 			}
+		//
+		// 			else{
+		// 				slot = &(*slot)->next_free;
+		// 			}
+		// 		}
+		// 	}
 		}
 
 	/**
