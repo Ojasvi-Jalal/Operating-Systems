@@ -104,9 +104,6 @@ private:
 		pgd->next_free = *slot;
 		*slot = pgd;
 
-		//mm_log.messagef(LogLevel::DEBUG, "INSERT_BLOCK: have inserted now at %d, here's the new state",order);
-		dump_state();
-		// Return the insert point (i.e. slot)
 		return slot;
 	}
 
@@ -130,8 +127,6 @@ private:
 		// Remove the block from the free list.
 		*slot = pgd->next_free;
 		pgd->next_free = NULL;
-		//mm_log.messagef(LogLevel::DEBUG, "REMOVE_PAGES: Dump after removal");
-		dump_state();
 	}
 
 	/**
@@ -150,34 +145,26 @@ private:
 		// Make sure the block_pointer is correctly aligned.
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
 
-		//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: checking if source_order is 0");
-		if(source_order == 0)
+		//Order 0 or invalid order cannot be split
+		if(source_order <= 0)
 			return *block_pointer;
+
 		else{
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: source order is not 0,so starting splitting");
+				//we want to split into source_order-1
 				int split_order = source_order-1;
+				//number of pages in a block in the target order
 				uint64_t size = pages_per_block(split_order);
 
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: source_order:%d",source_order);
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: split_order:%d",split_order);
-
+				//split the current block into left-hand-side and right-hand-size based on "size"
 				PageDescriptor *first_half = *block_pointer;
 				PageDescriptor *second_half = first_half+size;
 
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: removing the block now");
-				assert(*block_pointer == first_half);
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: I looked for %lx, I found %lx", sys.mm().pgalloc().pgd_to_pfn(*block_pointer),sys.mm().pgalloc().pgd_to_pfn(first_half));
+				//remove the block from the source_order
 				remove_block(first_half, source_order);
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: dump_state after removing");
-				dump_state();
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: inserting first half");
+
+				//insert the right and left blocks into the split order
 				insert_block(first_half,split_order);
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: dump_state after first insert");
-				dump_state();
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: inserting second half");
 				insert_block(second_half,split_order);
-				//mm_log.messagef(LogLevel::DEBUG, "SPLIT_BLOCK: dump_state after second insert");
-				dump_state();
 
 				return first_half;
 		}
@@ -193,28 +180,30 @@ private:
 	 */
 	PageDescriptor **merge_block(PageDescriptor **block_pointer, int source_order)
 	{
-		//mm_log.messagef(LogLevel::DEBUG, "MERGE_BLOCK: merging at order,%d, %lx",source_order, sys.mm().pgalloc().pgd_to_pfn(*block_pointer));
 		assert(*block_pointer);
 
 		// Make sure the area_pointer is correctly aligned.
 		assert(is_correct_alignment_for_order(*block_pointer, source_order));
 
-		// TODO: Implement this function
+		// blocks in the maximum order cannot be merged
+		if(source_order >= MAX_ORDER -1){
+			return NULL;
+		}
+
 		PageDescriptor* buddy = buddy_of(*block_pointer,source_order);
 		PageDescriptor* left = *block_pointer;
 
+		//remove the block and it's buddy from the source_order
 		remove_block(left,source_order);
 		remove_block(buddy,source_order);
 
+		//if left comes before in buddy the order, insert left block into source_order+1
 		if(buddy>left){
-				//mm_log.messagef(LogLevel::DEBUG,"MERGE_BLOCK: going on to insert block with the pgd on lhs, %d",source_order+1);
 				return insert_block(left,source_order+1);
-				//mm_log.messagef(LogLevel::DEBUG,"MERGE_BLOCK: will never reach here");
 		}
+		//otherwise, insert buddy into source_order+1
 		else{
-				//mm_log.messagef(LogLevel::DEBUG,"MERGE_BLOCK: going on to insert block with the buddy on rhs, %d",source_order+1);
 				return insert_block(buddy,source_order+1);
-				//mm_log.messagef(LogLevel::DEBUG,"MERGE_BLOCK: will never reach here");
 		}
 	}
 
@@ -237,39 +226,37 @@ public:
 	 */
 	PageDescriptor *alloc_pages(int order) override
 	{
-		//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: allocating at %d", order);
 		PageDescriptor *slot = _free_areas[order];
 
-		if(order<0 ||  order>=MAX_ORDER){
-			//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: illegal order number %d", order);
+		//check if the right order is requested
+		if(order<0 || order>=MAX_ORDER){
 			return NULL;
 		}
 
+		/*if the block at the given order
+		//is not free then just remove it and return the page descriptor
+		*/
 		if (slot != NULL) {
-			//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: the order already has something, removing it now: %lx", sys.mm().pgalloc().pgd_to_pfn(slot));
 			remove_block(slot,order);
 			return slot;
 		}
 
+		//find the first free block with order nearest to the requested order to free
 		else{
 			int split_order;
 			for(split_order=order+1;split_order<MAX_ORDER;split_order++){
-				//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: looking for something at order: %d",split_order);
 				if(_free_areas[split_order])
 					break;
 			}
 
-			//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: found at order: %d",split_order);
+			// work towards the requested order, split the orders to release the
+			// pages
 			while(split_order>order){
-				//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: splitting at order: %d, %lx",split_order, sys.mm().pgalloc().pgd_to_pfn(_free_areas[split_order]));
 				slot = split_block(&_free_areas[split_order],split_order);
 				split_order--;
 			}
-			assert(split_order == order);
-			////mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: splitting at order: %lx", sys.mm().pgalloc().pgd_to_pfn(_free_areas[split_order]));
+			//requested order is reached, remove the block.
 			remove_block(slot,order);
-			//mm_log.messagef(LogLevel::DEBUG, "ALLOC_PAGES: Dump after final remove");
-			dump_state();
 			return slot;
 		}
 	}
@@ -285,31 +272,30 @@ public:
 		// for the order on which it is being freed, for example, it is
 		// illegal to free page 1 in order-1.
 		assert(is_correct_alignment_for_order(pgd, order));
-		//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGES: freeing %lx", sys.mm().pgalloc().pgd_to_pfn(pgd));
-		//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGES: inserting at %d", order);
+
+		//Insert the block back into the order
 		PageDescriptor **slot = insert_block(pgd,order);
-		//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGES: state after inserting");
-		dump_state();
+
+		//used to see if the buddy of the given pgd is free
 		PageDescriptor *check = _free_areas[order];
 		PageDescriptor* buddy = buddy_of(*slot,order);
 
+		//Keep merging block while the buddy is also free and the max order is not reached
 		while(order<MAX_ORDER-1){
-
+			//checking if the buddy is free
 			while (check && check != buddy) {
-					//mm_log.messagef(LogLevel::DEBUG,"Order is %d",order);
-					//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGE: slot was %lx", sys.mm().pgalloc().pgd_to_pfn(*slot));
 					check = check->next_free;
-					//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGE: slot is now %lx", sys.mm().pgalloc().pgd_to_pfn(*slot));
 			}
 
+			//buddy is free: merge into the next order and update the buddy etc.
 			if(check == buddy){
-					//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGES: buddy %lx", sys.mm().pgalloc().pgd_to_pfn(buddy_of(*slot,order)));
-					//mm_log.messagef(LogLevel::DEBUG, "FREE_PAGES: merging at %d", order);
 					slot = merge_block(slot, order);
 					order++;
 					check = _free_areas[order];
 					buddy = buddy_of(*slot,order);
 			}
+
+			//the buddy is not free, so can't merge
 			else{
 				break;
 			}
@@ -323,60 +309,52 @@ public:
 	 */
 	bool reserve_page(PageDescriptor *pgd)
 	{
-
-		//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: currently looking for %lx", sys.mm().pgalloc().pgd_to_pfn(pgd));
 		int order = 0;
-
+		// starting from order 0, look for pdg
 		for(order = 0; order<MAX_ORDER; order++){
 				PageDescriptor *slot = _free_areas[order];
-				//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: order: %d", order);
+
+				//does this slot contain the page
 				while (slot) {
+						//if order is 0, simply remove and return true if the page is found
 						if(order == 0){
 							while (slot && pgd != slot) {
-								//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: slot was %lx", sys.mm().pgalloc().pgd_to_pfn(slot));
 								slot = slot->next_free;
-								//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: slot is now %lx", sys.mm().pgalloc().pgd_to_pfn(slot));
 							}
 
 							if(slot == pgd){
-								//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: order %d, I looked for %lx, I found %lx", order, sys.mm().pgalloc().pgd_to_pfn(pgd),sys.mm().pgalloc().pgd_to_pfn(slot));
-								assert(slot == pgd);
-								assert(order == 0);
-								//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: found the page at 0th order, will be removing it now");
 								remove_block(slot,order);
-								dump_state();
 								return true;
 							}
 						}
 
+						/*when order != 0 simply spilt the block and start searching backwards
+						//until order 0 is reached
+						*/
 						if(pgd >= slot && pgd < (slot+pages_per_block(order))){
-							//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: pgd is in this block at order %d, will split now",order);
-							//mm_log.messagef(LogLevel::DEBUG, "breaking now");
 							slot = split_block(&slot,order);
 							order--;
 
+							//now look if the page is in the new slot or it's buddy
 							if(!(pgd >= slot) && !(pgd < slot+pages_per_block(order))){
-								//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: looking for the buddy",order);
 								slot = buddy_of(slot,order);
 							}
-							//mm_log.messagef(LogLevel::DEBUG, "didn't break");
 						}
 
+						//if slot doesn't has the page move on to the next free slot
 						else{
-							//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: going to the next block");
 							if(slot)
 								slot = slot->next_free;
+							//the order doesn't have the page
+							//break out of the while loop and search order+1
 							else
 								break;
-							//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: at the next block");
-							PageDescriptor *test = NULL;
-							//mm_log.messagef(LogLevel::DEBUG, "RESERVE_PAGE: slot is now %lx", sys.mm().pgalloc().pgd_to_pfn(test));
 						}
-
 				}
-			}
-			return false;
-		}
+		 }
+		 //the requested page was not found: return false
+		 return false;
+	 }
 
 	/**
 	 * Initialises the allocation algorithm.
@@ -384,26 +362,15 @@ public:
 	 */
 	bool init(PageDescriptor *page_descriptors, uint64_t nr_page_descriptors) override
 	{
-		//mm_log.messagef(LogLevel::DEBUG, "Buddy Allocator Initialising pd=%p, nr=0x%lx", page_descriptors, nr_page_descriptors);
-
-		// TODO: Initialise the free area linked list for the maximum order
-		// to initialise the allocation algorithm.
-
-		//TODO: case when it returns false
 		auto order = MAX_ORDER-1;
 		uint64_t free = nr_page_descriptors;
 		auto pgd = page_descriptors;
 
-		//mm_log.messagef(LogLevel::DEBUG, "INIT:");
 		// Iterate whilst there is are pages still unallocated and order is not less than 0
 		while(free>0){
-			//mm_log.messagef(LogLevel::DEBUG, "init: inside while loop");
-		  //mm_log.messagef(LogLevel::DEBUG, "order: %d", order);
-			//mm_log.messagef(LogLevel::DEBUG, "free pages: %d", free);
 			//find the number of blocks that could be allocated to the order given free.
 			uint64_t blocks_needed = free/pages_per_block(order);
 
-			//mm_log.messagef(LogLevel::DEBUG, "blocks needed: %d", blocks_needed);
 			assert(is_correct_alignment_for_order(pgd, order));
 
 			//if more than 0 blocks can be allocated then
@@ -416,24 +383,13 @@ public:
 					pgd->next_free = pgd+ pages_per_block(order);
 					pgd += pages_per_block(order);
 				}
-
-				//pgd += pages_per_block(order);
 			}
 
 			//calculate the new number of free pages
 			free = free % (pages_per_block(order));
-			//mm_log.messagef(LogLevel::DEBUG, "updated free: %d", free);
 			//go to the next order
 			order--;
-		}
-
-		//mm_log.messagef(LogLevel::DEBUG, "returning true");
-
-		// while(true) {
-		// 	dump_state();
-		// 	reserve_page(page_descriptors);
-		// 	dump_state();
-		// }
+	 	}
 		return true;
 	}
 
