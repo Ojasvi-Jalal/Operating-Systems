@@ -22,9 +22,12 @@ class CMOSRTC : public RTC {
 public:
 	static const DeviceClass CMOSRTCDeviceClass;
 
-	#define	cmos_write	0x70
+	//to access a byte of CMOS memory
+	#define	cmos_write 0x70
+	//in order to read the value from registers
 	#define	cmos_read	0x71
 
+	//will store the values of the relevant CMOS registers for the real-time clock
 	unsigned short second;
 	unsigned short minute;
 	unsigned short hour;
@@ -37,45 +40,52 @@ public:
 		return CMOSRTCDeviceClass;
 	}
 
+	/*
+	//interrogating register A to check if an update is in progress
+	*/
 	bool is_update_in_progress(){
+		//the update in progress flag is stored in bit 7 of register A
 		__outb(cmos_write, 0x0A);
-		/*good idea to have a reasonable delay after selecting a CMOS register on Port
-		//0x70, before reading/writing the value on Port 0x71
-		*/
-		//usleep(nanoseconds(100));
-		//if bit 7 is set then update is in progress otherwise no.
-		uint8_t test = __inb(cmos_read)&1<<7; //& 1<<6;//
-		//uint8_t test = __inb(cmos_read) & //1<<7;
+		uint8_t test = __inb(cmos_read)&1<<7;
+
 		//syslog.messagef(LogLevel::DEBUG, "IsUpdateInProgress: register A's 7 bit: %d,",test);
+		//if bit 7 is set then update is in progress otherwise no.
 		if(test){
-			syslog.messagef(LogLevel::DEBUG, "IsUpdateInProgress: register A's 7 bit is set to 1: %d,", test);
 			return true;
-		}		
+		}
 		else{
-			//syslog.messagef(LogLevel::DEBUG, "IsUpdateInProgress: register A's 7 bit is set to 0");
 			return false;
 		}
-			
 	}
 
+	/*
+	//interrogating register B to check whether the value contained within the registers is in
+	//binary or binary coded decimal
+	*/
 	bool is_bcd(){
 		__outb(cmos_write, 0x0B);
-		/*good idea to have a reasonable delay after selecting a CMOS register on Port
-		//0x70, before reading/writing the value on Port 0x71
-		*/
-		//usleep(nanoseconds(100));
+		//check bit 2 of register B
 		uint8_t bcd = __inb(cmos_read)&(1<<2);
+
+		//if bit 2 of register B is set then the values are stored in binary else in bcd.
 		if(bcd)
-				return false;
+			return false;
 		else
-				return true;
+			return true;
 	}
 
+	/*
+	//reads the byte at a given offset (reads the values of a register)
+	*/
 	unsigned short read_register(int reg) {
+		//activate offset "reg"
 		__outb(cmos_write,reg);
+		//read data
 		uint8_t RTC_register = __inb(cmos_read);
-		// if(is_bcd()&&reg == 4)
-		// 		return ((RTC_register&0x0F) + (RTC_register&cmos_write/16)*10)|(RTC_register&0x80);
+		/*check if the value stored in the register
+		//is in binary or binary coded decimal,
+		//if in BCD, return it's converted binary value
+		*/
 		if(is_bcd())
 			return ((RTC_register&0x0F)+(RTC_register/16)*10);
 		else
@@ -91,26 +101,21 @@ public:
 		//make sure interrupts are disabled when  manipulating the run queue
 		UniqueIRQLock l;
 
-		//wait for an update cycle to begin and an update cycle to complete	
+		//wait for an update cycle to begin and an update cycle to complete
 		if(!is_update_in_progress()){
 			while(!is_update_in_progress());
 			while(is_update_in_progress());
 		}
-	
+
+		//read the real time clock registers
 		second	= read_register(0x00);
-    	minute	= read_register(0x02);
-    	hour	= read_register(0x04);
-    	day 	= read_register(0x07);
-    	month 	= read_register(0x08);
-    	year 	= read_register(0x09);
+  	minute	= read_register(0x02);
+  	hour	= read_register(0x04);
+  	day 	= read_register(0x07);
+  	month 	= read_register(0x08);
+  	year 	= read_register(0x09);
 
-		// unsigned short registerB;
-		// registerB = read_register(0x0B);
-
-		// if(!(registerB & 0x02) && (hour & 0x80)){
-		// 	hour = ((hour & 0x7F) + 12)%24;
-		// }
-
+		//filling in the fields of RTCTimePoint, the structure provided
 		tp.seconds			=  second;
 		tp.minutes 			=  minute;
 		tp.hours			=  hour;
