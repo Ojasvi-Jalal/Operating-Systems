@@ -155,10 +155,11 @@ public:
 			if(is_bcd())
 				hour = ((hour&0x0F)+(hour/16)*10);
 
-			if(pm)
+			//when pm except midday
+			if(pm&&hour!=12)
 				hour += 12;
 			//when midnight
-			else if(hour == 12)
+			else if(!pm&&hour == 12)
 				hour = 0;
 		}
 
