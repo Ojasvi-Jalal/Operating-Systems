@@ -137,11 +137,11 @@ public:
 
 		//read the real time clock registers
 		second	= read_register(0x00);
-  	minute	= read_register(0x02);
-  	hour		= read_hour();
-  	day 		= read_register(0x07);
-  	month 	= read_register(0x08);
-  	year 		= read_register(0x09);
+  		minute	= read_register(0x02);
+  		hour	= read_hour();
+  		day 	= read_register(0x07);
+  		month 	= read_register(0x08);
+  		year 	= read_register(0x09);
 
 		//12 hour clock to 24 hour clock conversion if NECESSARY
 		if(is_twelve()){
@@ -168,12 +168,12 @@ public:
 		}
 
 		//filling in the fields of RTCTimePoint, the structure provided
-		tp.seconds				=  second;
-		tp.minutes 				=  minute;
-		tp.hours					=  hour;
-		tp.day_of_month		=  day;
-		tp.month					=  month;
-		tp.year						=  year;
+		tp.seconds		=  second;
+		tp.minutes 		=  minute;
+		tp.hours		=  hour;
+		tp.day_of_month	=  day;
+		tp.month		=  month;
+		tp.year			=  year;
 	}
 };
 
